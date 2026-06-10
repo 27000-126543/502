@@ -2,14 +2,14 @@ const gameState = require('./gameState');
 const { ELEMENTS, RARITY, RESONANCE_PAIRS } = require('./constants');
 
 const ELEMENT_COUNTER = {
-  'fire': 'water',
-  'water': 'fire',
-  'earth': 'wind',
-  'wind': 'earth',
-  'thunder': 'ice',
-  'ice': 'thunder',
-  'light': 'dark',
-  'dark': 'light'
+  'FIRE': 'WATER',
+  'WATER': 'FIRE',
+  'EARTH': 'WIND',
+  'WIND': 'EARTH',
+  'THUNDER': 'ICE',
+  'ICE': 'THUNDER',
+  'LIGHT': 'DARK',
+  'DARK': 'LIGHT'
 };
 
 function calculateArray(runeIds, playerId = null) {
@@ -141,7 +141,7 @@ function detectBacklash(runes) {
 
   if (counterPairs === 0) return null;
 
-  const chance = counterPairs * 0.15;
+  const chance = counterPairs * 0.35;
   const actualTrigger = Math.random() < chance;
   if (!actualTrigger) return null;
 
