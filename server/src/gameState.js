@@ -12,6 +12,7 @@ class GameState {
     this.arrayTrades = new Map();
     this.arrayTradeHistory = [];
     this.battles = new Map();
+    this.battleReports = new Map();
     this.matchQueue = [];
     this.announcements = [];
     this.runeStorm = null;
@@ -71,6 +72,8 @@ class GameState {
       currentBattleId: null,
       researchSpeedBonus: 0,
       craftBonus: 0,
+      latestReportId: null,
+      recentReportIds: [],
       createdAt: Date.now()
     };
     this.players.set(id, player);
@@ -166,11 +169,23 @@ class GameState {
     const player = this.players.get(playerId);
     if (!player) return null;
     const id = uuidv4();
+    const runes = runeIds.map(rid => {
+      const r = this.runes.get(rid);
+      if (!r) return null;
+      return {
+        id: r.id,
+        name: r.name,
+        element: r.element,
+        power: r.power,
+        rarity: r.rarity
+      };
+    }).filter(Boolean);
     const array = {
       id,
       name: name || `阵法_${Date.now()}`,
       playerId,
       runeIds: [...runeIds],
+      runes,
       power: result.power || 0,
       range: result.range || 0,
       duration: result.duration || 0,
@@ -181,6 +196,8 @@ class GameState {
       totalRunes: runeIds.length,
       listedForSale: false,
       price: 0,
+      source: 'created',
+      originalOwnerId: playerId,
       createdAt: Date.now()
     };
     this.arrays.set(id, array);
@@ -245,6 +262,8 @@ class GameState {
       playerId: buyerId,
       listedForSale: false,
       price: 0,
+      source: 'purchased',
+      originalOwnerId: array.originalOwnerId || array.playerId,
       createdAt: Date.now()
     };
     this.arrays.set(newArrayId, newArray);
@@ -524,6 +543,21 @@ class GameState {
         this.weeklyStats.runeUsage[rune.element]++;
       }
     });
+  }
+
+  createBattleReport(data) {
+    const id = uuidv4();
+    const report = {
+      id,
+      ...data,
+      createdAt: Date.now()
+    };
+    this.battleReports.set(id, report);
+    return id;
+  }
+
+  getBattleReport(id) {
+    return this.battleReports.get(id);
   }
 }
 

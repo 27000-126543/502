@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const gameState = require('./gameState');
 const { calculateArray, calculateArrayScore } = require('./arrayEngine');
-const { RARITY } = require('./constants');
+const { RARITY, SEASON_RANKS } = require('./constants');
 
 class BattleManager {
   constructor(io) {
@@ -25,7 +25,7 @@ class BattleManager {
         if (!p2) { matched.add(queue[j]); continue; }
 
         const diff = Math.abs(p1.battlePoints - p2.battlePoints);
-        if (diff < 200) {
+        if (diff < 300) {
           this.startBattle(p1.id, p2.id);
           matched.add(queue[i]);
           matched.add(queue[j]);
@@ -35,6 +35,37 @@ class BattleManager {
     }
 
     gameState.matchQueue = queue.filter(id => !matched.has(id));
+  }
+
+  getRankInfo(points) {
+    for (const rank of SEASON_RANKS) {
+      if (points >= rank.minPoints && points <= rank.maxPoints) {
+        return rank;
+      }
+    }
+    return SEASON_RANKS[0];
+  }
+
+  calculatePointChange(winner, loser) {
+    const winnerRank = this.getRankInfo(winner.battlePoints);
+    const loserRank = this.getRankInfo(loser.battlePoints);
+
+    const diff = loser.battlePoints - winner.battlePoints;
+    const strengthFactor = 1 + Math.max(0, diff / 1000);
+    const baseWin = Math.floor((15 + winnerRank.minDeduct * 0.8) * strengthFactor);
+    const baseDeduct = Math.floor(baseWin * (0.8 + diff / 2000));
+
+    const protectLoss = loserRank.protectLoss;
+    const actualDeduct = Math.floor(baseDeduct * (1 - protectLoss));
+    const minDeduct = loserRank.minDeduct;
+    const finalDeduct = Math.max(minDeduct, actualDeduct);
+
+    const floorPoints = SEASON_RANKS[0].minPoints;
+    return {
+      winAdd: baseWin,
+      loseDeduct: finalDeduct,
+      floorPoints
+    };
   }
 
   startBattle(player1Id, player2Id) {
@@ -60,7 +91,9 @@ class BattleManager {
       disruptStatus: { [player1Id]: 0, [player2Id]: 0 },
       startTime: Date.now(),
       lastUpdate: Date.now(),
-      events: []
+      events: [],
+      energySnapshots: [],
+      skillLogs: []
     };
 
     this.battles.set(battleId, battle);
@@ -69,10 +102,9 @@ class BattleManager {
     gameState.removeFromMatchQueue(player1Id);
     gameState.removeFromMatchQueue(player2Id);
 
+    this.addBattleEvent(battleId, `⚔️ ${p1.name} VS ${p2.name} 对战开始！`);
     this.io.to(p1.socketId).emit('battle_start', this.getBattleState(battleId, player1Id));
     this.io.to(p2.socketId).emit('battle_start', this.getBattleState(battleId, player2Id));
-
-    this.addBattleEvent(battleId, `⚔️ ${p1.name} VS ${p2.name} 对战开始！`);
   }
 
   getBattleState(battleId, playerId) {
@@ -134,7 +166,9 @@ class BattleManager {
       battle.player2ArrayResult = result;
     }
 
-    this.addBattleEvent(battle.id, `${player.name} 布置了阵法 ${arrayData.name}`);
+    const resonanceText = result.resonance ? `（✨共鸣: ${result.resonance.name}）` : '';
+    const backlashText = result.backlash ? `（💥反噬: ${result.backlash.name}）` : '';
+    this.addBattleEvent(battle.id, `${player.name} 布置了阵法「${arrayData.name}」${resonanceText}${backlashText}`);
     this.broadcastBattleState(battle.id);
 
     return { success: true, array: arrayData, result };
@@ -150,7 +184,7 @@ class BattleManager {
     if (isP1) battle.player1Ready = ready;
     else battle.player2Ready = ready;
 
-    this.addBattleEvent(battle.id, `${player.name} ${ready ? '已准备' : '取消准备'}`);
+    this.addBattleEvent(battle.id, `${player.name} ${ready ? '已准备就绪' : '取消准备'}`);
 
     if (battle.player1Ready && battle.player2Ready) {
       this.startFightingPhase(battle.id);
@@ -166,25 +200,27 @@ class BattleManager {
 
     battle.phase = 'fighting';
     battle.lastUpdate = Date.now();
+    battle.energySnapshots.push({
+      timestamp: Date.now(),
+      player1Energy: battle.player1Energy,
+      player2Energy: battle.player2Energy
+    });
 
     const p1 = gameState.getPlayer(battle.player1Id);
     const p2 = gameState.getPlayer(battle.player2Id);
 
-    const score1 = calculateArrayScore(battle.player1ArrayResult);
-    const score2 = calculateArrayScore(battle.player2ArrayResult);
-
-    this.addBattleEvent(battle.id, `🔥 战斗开始！阵法对决！`);
+    this.addBattleEvent(battle.id, `🔥 双方准备完毕，战斗正式开始！`);
     if (battle.player1ArrayResult?.resonance) {
-      this.addBattleEvent(battle.id, `✨ ${p1?.name} 触发共鸣：${battle.player1ArrayResult.resonance.name}`);
+      this.addBattleEvent(battle.id, `✨ ${p1?.name} 的阵法触发共鸣：${battle.player1ArrayResult.resonance.name}，威力×${battle.player1ArrayResult.resonance.powerBoost}！`);
     }
     if (battle.player2ArrayResult?.resonance) {
-      this.addBattleEvent(battle.id, `✨ ${p2?.name} 触发共鸣：${battle.player2ArrayResult.resonance.name}`);
+      this.addBattleEvent(battle.id, `✨ ${p2?.name} 的阵法触发共鸣：${battle.player2ArrayResult.resonance.name}，威力×${battle.player2ArrayResult.resonance.powerBoost}！`);
     }
     if (battle.player1ArrayResult?.backlash) {
-      this.addBattleEvent(battle.id, `💥 ${p1?.name} 遭遇反噬！`);
+      this.addBattleEvent(battle.id, `💥 ${p1?.name} 的阵法遭遇元素反噬，威力削弱！`);
     }
     if (battle.player2ArrayResult?.backlash) {
-      this.addBattleEvent(battle.id, `💥 ${p2?.name} 遭遇反噬！`);
+      this.addBattleEvent(battle.id, `💥 ${p2?.name} 的阵法遭遇元素反噬，威力削弱！`);
     }
 
     this.broadcastBattleState(battleId);
@@ -207,6 +243,14 @@ class BattleManager {
       const baseDrain = 3 * delta;
       battle.player1Energy -= baseDrain * (score2 / totalScore);
       battle.player2Energy -= baseDrain * (score1 / totalScore);
+
+      if (Math.random() < 0.1) {
+        battle.energySnapshots.push({
+          timestamp: now,
+          player1Energy: Math.max(0, battle.player1Energy),
+          player2Energy: Math.max(0, battle.player2Energy)
+        });
+      }
 
       Object.keys(battle.disruptStatus).forEach(pid => {
         if (battle.disruptStatus[pid] > 0) {
@@ -257,6 +301,7 @@ class BattleManager {
     battle.runeCooldowns[playerId][runeId] = rune.cooldown;
 
     const skill = rune.skill;
+    let skillDetail = '';
     switch (skill.type) {
       case 'damage':
         if (battle.player1Id === target) {
@@ -264,12 +309,12 @@ class BattleManager {
         } else {
           battle.player2Energy = Math.max(0, battle.player2Energy - skill.value);
         }
-        this.addBattleEvent(battle.id, `💫 ${player.name} 使用 ${skill.name}，对 ${targetPlayer?.name} 造成 ${skill.value} 点能量伤害！`);
+        skillDetail = `对 ${targetPlayer?.name} 造成 ${skill.value} 点能量伤害`;
         break;
 
       case 'disrupt':
         battle.disruptStatus[target] = skill.value * 1000;
-        this.addBattleEvent(battle.id, `🚫 ${player.name} 使用 ${skill.name}，干扰 ${targetPlayer?.name} ${skill.value} 秒！`);
+        skillDetail = `干扰 ${targetPlayer?.name} ${skill.value} 秒`;
         break;
 
       case 'shield':
@@ -278,7 +323,7 @@ class BattleManager {
         } else {
           battle.player2Energy = Math.min(100, battle.player2Energy + skill.value);
         }
-        this.addBattleEvent(battle.id, `🛡️ ${player.name} 使用 ${skill.name}，恢复 ${skill.value} 点能量！`);
+        skillDetail = `恢复自身 ${skill.value} 点能量`;
         break;
 
       case 'energy_boost':
@@ -287,9 +332,25 @@ class BattleManager {
         } else {
           battle.player2ArrayResult.power = Math.floor(battle.player2ArrayResult.power * (1 + skill.value / 100));
         }
-        this.addBattleEvent(battle.id, `⚡ ${player.name} 使用 ${skill.name}，阵法威力提升 ${skill.value}%！`);
+        skillDetail = `阵法威力提升 ${skill.value}%`;
         break;
     }
+
+    this.addBattleEvent(battle.id, `💫 ${player.name} 释放【${skill.name}】，${skillDetail}！`);
+    battle.skillLogs.push({
+      timestamp: Date.now(),
+      casterId: playerId,
+      casterName: player.name,
+      targetId: target,
+      targetName: targetPlayer?.name,
+      skillName: skill.name,
+      detail: skillDetail
+    });
+    battle.energySnapshots.push({
+      timestamp: Date.now(),
+      player1Energy: Math.max(0, battle.player1Energy),
+      player2Energy: Math.max(0, battle.player2Energy)
+    });
 
     this.broadcastBattleState(battle.id);
     return { success: true };
@@ -315,14 +376,19 @@ class BattleManager {
 
     gameState.recordBattleResult(winnerId, loserId, battle.player1Array, battle.player2Array);
 
-    const pointChange = Math.floor(20 + Math.random() * 10);
-    if (winner) winner.battlePoints += pointChange;
-    if (loser) loser.battlePoints = Math.max(100, loser.battlePoints - pointChange);
+    const { winAdd, loseDeduct, floorPoints } = this.calculatePointChange(winner, loser);
+    const winnerOldPoints = winner.battlePoints;
+    const loserOldPoints = loser.battlePoints;
+
+    winner.battlePoints = winner.battlePoints + winAdd;
+    loser.battlePoints = Math.max(floorPoints, loser.battlePoints - loseDeduct);
+    const actualLoseDeduct = loserOldPoints - loser.battlePoints;
 
     const rewards = this.calculateRewards(winnerId);
 
-    this.addBattleEvent(battle.id, `🏆 ${winner?.name} 获得胜利！获得 ${pointChange} 积分和奖励！`);
-    this.addBattleEvent(battle.id, `获得金币: ${rewards.coins}, 获得符文: ${rewards.rune?.name || '无'}`);
+    this.addBattleEvent(battle.id, `🏆 ${winner?.name} 获得最终胜利！`);
+    this.addBattleEvent(battle.id, `⭐ 积分结算：${winner?.name} +${winAdd}分（${winnerOldPoints}→${winner.battlePoints}），${loser?.name} -${actualLoseDeduct}分（${loserOldPoints}→${loser.battlePoints}）`);
+    this.addBattleEvent(battle.id, `🎁 奖励：金币+${rewards.coins}${rewards.rune ? `，获得符文【${rewards.rune.name}】` : ''}`);
 
     if (winner) {
       winner.coins += rewards.coins;
@@ -330,17 +396,61 @@ class BattleManager {
         gameState.addRuneToPlayer(winnerId, rewards.rune.id);
       }
       winner.currentBattleId = null;
-      this.io.to(winner.socketId).emit('battle_end', {
-        win: true,
-        points: pointChange,
-        rewards
-      });
     }
     if (loser) {
       loser.currentBattleId = null;
+    }
+
+    const reportId = gameState.createBattleReport({
+      battleId,
+      winnerId,
+      loserId,
+      player1Id: battle.player1Id,
+      player2Id: battle.player2Id,
+      player1Name: gameState.getPlayer(battle.player1Id)?.name,
+      player2Name: gameState.getPlayer(battle.player2Id)?.name,
+      player1Array: battle.player1Array,
+      player2Array: battle.player2Array,
+      player1ArrayResult: battle.player1ArrayResult,
+      player2ArrayResult: battle.player2ArrayResult,
+      player1FinalEnergy: Math.max(0, battle.player1Energy),
+      player2FinalEnergy: Math.max(0, battle.player2Energy),
+      events: battle.events,
+      energySnapshots: (battle.energySnapshots || []).map(s => ({
+        t: s.timestamp || Date.now(),
+        p1: s.player1Energy,
+        p2: s.player2Energy
+      })),
+      skillLogs: battle.skillLogs || [],
+      pointChange: { winAdd, loseDeduct: actualLoseDeduct },
+      rewards,
+      duration: Date.now() - battle.startTime,
+      timestamp: battle.startTime
+    });
+
+    [battle.player1Id, battle.player2Id].forEach(pid => {
+      const p = gameState.getPlayer(pid);
+      if (!p) return;
+      p.latestReportId = reportId;
+      if (!p.recentReportIds) p.recentReportIds = [];
+      p.recentReportIds.unshift(reportId);
+      if (p.recentReportIds.length > 20) p.recentReportIds.length = 20;
+    });
+
+    if (winner?.socketId) {
+      this.io.to(winner.socketId).emit('battle_end', {
+        win: true,
+        points: winAdd,
+        rewards,
+        reportId
+      });
+    }
+    if (loser?.socketId) {
       this.io.to(loser.socketId).emit('battle_end', {
         win: false,
-        points: -pointChange
+        points: -actualLoseDeduct,
+        rewards: { coins: 0, rune: null },
+        reportId
       });
     }
 
@@ -348,19 +458,19 @@ class BattleManager {
 
     setTimeout(() => {
       this.battles.delete(battleId);
-    }, 30000);
+    }, 60000);
   }
 
   calculateRewards(winnerId) {
     const coins = 500 + Math.floor(Math.random() * 1500);
     let rune = null;
 
-    if (Math.random() < 0.4) {
+    if (Math.random() < 0.5) {
       const elements = ['FIRE', 'WATER', 'EARTH', 'WIND', 'LIGHT', 'DARK', 'THUNDER', 'ICE'];
       const rarityRoll = Math.random();
       let rarity;
-      if (rarityRoll < 0.05) rarity = 'LEGENDARY';
-      else if (rarityRoll < 0.15) rarity = 'EPIC';
+      if (rarityRoll < 0.03) rarity = 'LEGENDARY';
+      else if (rarityRoll < 0.12) rarity = 'EPIC';
       else if (rarityRoll < 0.35) rarity = 'RARE';
       else if (rarityRoll < 0.7) rarity = 'UNCOMMON';
       else rarity = 'COMMON';

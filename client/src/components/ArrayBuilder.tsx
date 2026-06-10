@@ -186,14 +186,19 @@ export default function ArrayBuilder() {
             </div>
 
             <div className="text-center mb-10">
-              {result.resonance && (
+              {result.resonance && result.resonance.triggered && (
                 <span className="effect-badge effect-resonance">
                   ✨ 共鸣触发: {result.resonance.name} (威力×{result.resonance.powerBoost})
                 </span>
               )}
-              {result.backlash && (
+              {result.backlash && result.backlash.triggered && (
                 <span className="effect-badge effect-backlash">
-                  💥 反噬触发: {result.backlash.name}
+                  💥 反噬触发: {result.backlash.name} (威力-{((result.backlash.powerReduction || 0) * 100).toFixed(0)}%)
+                </span>
+              )}
+              {((result.resonance && !result.resonance.triggered) && (result.backlash && !result.backlash.triggered)) && (
+                <span className="text-sm text-slate-500">
+                  本次未触发特殊效果（可尝试更换元素组合提升共鸣概率）
                 </span>
               )}
             </div>
@@ -237,17 +242,37 @@ export default function ArrayBuilder() {
 
       {(player?.arrays?.length || 0) > 0 && (
         <div className="card mt-20">
-          <div className="card-title">📜 我的阵法 ({player?.arrays?.length || 0})</div>
+          <div className="card-title flex items-center justify-between flex-wrap gap-10">
+            <span>📜 我的阵法 ({player?.arrays?.length || 0})</span>
+            <div className="text-xs text-slate-400">
+              <span className="mr-3"><span className="inline-block w-3 h-3 rounded-full bg-amber-500 mr-1"></span>自建</span>
+              <span><span className="inline-block w-3 h-3 rounded-full bg-cyan-500 mr-1"></span>购买</span>
+            </div>
+          </div>
           <div className="rune-grid">
             {player?.arrays?.map((arr: any) => (
-              <div key={arr.id} className="rune-card rarity-epic" style={{ borderColor: '#ffaa44', color: '#ffaa44' }}>
+              <div
+                key={arr.id}
+                className="rune-card rarity-epic"
+                style={{
+                  borderColor: arr.source === 'purchased' ? '#06b6d4' : '#ffaa44',
+                  color: arr.source === 'purchased' ? '#06b6d4' : '#ffaa44'
+                }}>
                 <div className="rune-icon">📜</div>
                 <div className="rune-name">{arr.name}</div>
                 <div className="rune-power">⚡ 威力: {arr.power}</div>
                 <div className="rune-power">🎯 {arr.totalRunes || arr.runeIds?.length}个符文</div>
-                {arr.resonance && (
+                <div style={{ fontSize: 10, opacity: 0.8 }}>
+                  {arr.source === 'purchased' ? '🛒 购买所得' : '🛠️ 自建阵法'}
+                </div>
+                {arr.resonance && arr.resonance.triggered && (
                   <div className="effect-badge effect-resonance mt-10" style={{ fontSize: 10 }}>
                     ✨ {arr.resonance.name}
+                  </div>
+                )}
+                {arr.backlash && arr.backlash.triggered && (
+                  <div className="effect-badge effect-backlash mt-10" style={{ fontSize: 10 }}>
+                    💥 {arr.backlash.name}
                   </div>
                 )}
                 {arr.listedForSale && (

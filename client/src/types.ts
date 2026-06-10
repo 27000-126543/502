@@ -54,6 +54,8 @@ export interface Player {
   currentBattleId: string | null;
   researchSpeedBonus: number;
   craftBonus: number;
+  latestReportId: string | null;
+  recentReportIds: string[];
   runes?: Rune[];
   arrays?: ArrayData[];
   guild?: Guild | null;
@@ -68,6 +70,7 @@ export interface ArrayData {
   name: string;
   playerId: string;
   runeIds: string[];
+  runes?: Array<{ id: string; name: string; element: string; power: number; rarity: string }>;
   power: number;
   range: number;
   duration: number;
@@ -78,6 +81,8 @@ export interface ArrayData {
   totalRunes?: number;
   listedForSale?: boolean;
   price?: number;
+  source?: 'created' | 'purchased';
+  originalOwnerId?: string;
   createdAt: number;
 }
 
@@ -137,4 +142,77 @@ export interface TradeItem {
   listedAt: number;
   rune: Rune;
   seller: { id: string; name: string };
+}
+
+export interface SeasonRank {
+  id: string;
+  name: string;
+  minPoints: number;
+  maxPoints: number;
+  color: string;
+  protectLoss: number;
+  minDeduct: number;
+}
+
+export interface SeasonInfo {
+  ranks: SeasonRank[];
+  seasonEndTimestamp: number;
+  now: number;
+}
+
+export interface BattleReport {
+  id: string;
+  battleId: string;
+  player1Id: string;
+  player1Name: string;
+  player2Id: string;
+  player2Name: string;
+  winnerId: string;
+  player1Array: ArrayData | null;
+  player2Array: ArrayData | null;
+  player1ArrayResult: ArrayResult | null;
+  player2ArrayResult: ArrayResult | null;
+  events: BattleEvent[];
+  energySnapshots: {
+    t: number;
+    p1: number;
+    p2: number;
+  }[];
+  skillLogs: {
+    timestamp: number;
+    casterId: string;
+    casterName: string;
+    targetId: string;
+    targetName: string;
+    skillName: string;
+    detail: string;
+  }[];
+  pointChange: {
+    winAdd: number;
+    loseDeduct: number;
+  };
+  rewards: {
+    coins: number;
+    rune?: Rune;
+  };
+  duration: number;
+  timestamp: number;
+  createdAt: number;
+}
+
+export interface RecentReportSummary {
+  id: string;
+  isWinner: boolean;
+  opponentName: string;
+  pointChange: number;
+  duration: number;
+  createdAt: number;
+}
+
+export interface ArrayPriceHistory {
+  recent: any[];
+  avgPrice: number;
+  minPrice: number;
+  maxPrice: number;
+  totalSales: number;
 }

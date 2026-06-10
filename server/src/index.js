@@ -6,7 +6,7 @@ const gameState = require('./gameState');
 const BattleManager = require('./battleManager');
 const { calculateArray, synthesizeRunes } = require('./arrayEngine');
 const { getWeeklyStats, getLeaderboards, getPlayerArrayRadarData, generatePDFReport } = require('./stats');
-const { ELEMENTS, RARITY } = require('./constants');
+const { ELEMENTS, RARITY, SEASON_RANKS, SEASON_END_TIMESTAMP } = require('./constants');
 
 const app = express();
 const server = http.createServer(app);
@@ -310,6 +310,62 @@ io.on('connection', (socket) => {
     if (currentPlayerId) {
       battleManager.playerDisconnect(currentPlayerId);
     }
+  });
+});
+
+app.get('/api/season/info', (req, res) => {
+  res.json({
+    ranks: SEASON_RANKS,
+    seasonEndTimestamp: SEASON_END_TIMESTAMP,
+    now: Date.now()
+  });
+});
+
+app.get('/api/battle/report/:id', (req, res) => {
+  const report = gameState.getBattleReport(req.params.id);
+  if (!report) return res.status(404).json({ error: '战报不存在' });
+  res.json(report);
+});
+
+app.get('/api/player/:id/reports', (req, res) => {
+  const player = gameState.getPlayer(req.params.id);
+  if (!player) return res.status(404).json({ error: '玩家不存在' });
+  const reports = (player.recentReportIds || []).map(id => {
+    const r = gameState.getBattleReport(id);
+    if (!r) return null;
+    const isWinner = r.winnerId === req.params.id;
+    return {
+      id: r.id,
+      isWinner,
+      opponentName: r.player1Id === req.params.id ? r.player2Name : r.player1Name,
+      pointChange: isWinner ? r.pointChange.winAdd : -r.pointChange.loseDeduct,
+      duration: r.duration,
+      createdAt: r.createdAt
+    };
+  }).filter(Boolean);
+  res.json(reports);
+});
+
+app.get('/api/trades/array/history/:power/:totalRunes', (req, res) => {
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const power = Number(req.params.power) || 0;
+  const totalRunes = Number(req.params.totalRunes) || 0;
+  const relevant = gameState.arrayTradeHistory.filter(t =>
+    t.timestamp > sevenDaysAgo &&
+    Math.abs(t.totalRunes - totalRunes) <= 2 &&
+    Math.abs(t.power - power) < Math.max(100, power * 0.5)
+  );
+  const prices = relevant.map(t => t.price);
+  const avg = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+  const sorted = [...prices].sort((a, b) => a - b);
+  const min = sorted[0] || 0;
+  const max = sorted[sorted.length - 1] || 0;
+  res.json({
+    recent: relevant.slice(-10),
+    avgPrice: Math.floor(avg),
+    minPrice: min,
+    maxPrice: max,
+    totalSales: prices.length
   });
 });
 

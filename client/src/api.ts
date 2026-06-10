@@ -1,12 +1,13 @@
 import axios from 'axios';
-import type { Player, ArrayResult, Rune, TradeItem, Guild } from './types';
+import type { Player, ArrayResult, Rune, TradeItem, Guild, ArrayData, SeasonInfo, BattleReport, RecentReportSummary, ArrayPriceHistory } from './types';
 
 const api = axios.create({ baseURL: '/api' });
 
 export const playerApi = {
   login: (name: string) => api.post<Player>('/player/login', { name }).then(r => r.data),
   get: (id: string) => api.get<Player>(`/player/${id}`).then(r => r.data),
-  getByName: (name: string) => api.get<Player>(`/player/byname/${name}`).then(r => r.data)
+  getByName: (name: string) => api.get<Player>(`/player/byname/${name}`).then(r => r.data),
+  getRecentReports: (id: string) => api.get<RecentReportSummary[]>(`/player/${id}/reports`).then(r => r.data)
 };
 
 export const runeApi = {
@@ -42,7 +43,9 @@ export const tradeApi = {
   cancelArray: (playerId: string, arrayId: string) =>
     api.post<{ success: boolean }>('/trades/array/cancel', { playerId, arrayId }).then(r => r.data),
   buyArray: (buyerId: string, arrayId: string) =>
-    api.post<{ success: boolean }>('/trades/array/buy', { buyerId, arrayId }).then(r => r.data)
+    api.post<{ success: boolean }>('/trades/array/buy', { buyerId, arrayId }).then(r => r.data),
+  getArrayPriceHistory: (power: number, totalRunes: number) =>
+    api.get<ArrayPriceHistory>(`/trades/array/history/${power}/${totalRunes}`).then(r => r.data)
 };
 
 export const guildApi = {
@@ -65,7 +68,12 @@ export const statsApi = {
 
 export const systemApi = {
   announcements: () => api.get<any[]>('/announcements').then(r => r.data),
-  constants: () => api.get<{ ELEMENTS: any; RARITY: any; runeStorm: any }>('/constants').then(r => r.data)
+  constants: () => api.get<{ ELEMENTS: any; RARITY: any; runeStorm: any }>('/constants').then(r => r.data),
+  seasonInfo: () => api.get<SeasonInfo>('/season/info').then(r => r.data)
+};
+
+export const battleApi = {
+  getReport: (id: string) => api.get<BattleReport>(`/battle/report/${id}`).then(r => r.data)
 };
 
 export default api;
