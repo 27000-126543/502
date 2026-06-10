@@ -12,10 +12,11 @@ const ELEMENT_ICONS: Record<string, string> = {
 const MAX_SLOTS = 8;
 
 export default function ArrayBuilder() {
-  const { player } = useStore();
+  const { player, refreshPlayer } = useStore();
   const [slots, setSlots] = useState<(Rune | null)[]>(Array(MAX_SLOTS).fill(null));
   const [result, setResult] = useState<ArrayResult | null>(null);
   const [arrayName, setArrayName] = useState('');
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const runeIds = slots.filter(Boolean).map(s => s!.id);
@@ -41,7 +42,29 @@ export default function ArrayBuilder() {
     setSlots(newSlots);
   };
 
-  const clearAll = () => setSlots(Array(MAX_SLOTS).fill(null));
+  const clearAll = () => {
+    setSlots(Array(MAX_SLOTS).fill(null));
+    setArrayName('');
+    setSaveMessage(null);
+  };
+
+  const saveArray = async () => {
+    if (!player || !result || result.error) return;
+    const runeIds = slots.filter(Boolean).map(s => s!.id);
+    if (runeIds.length < 2) return;
+
+    const name = arrayName.trim() || `阵法_${Date.now()}`;
+    const res = await arrayApi.save(player.id, runeIds, name, result);
+    if (res.success) {
+      setSaveMessage({ type: 'success', text: `✅ 阵法「${name}」保存成功！` });
+      clearAll();
+      await refreshPlayer();
+      setTimeout(() => setSaveMessage(null), 5000);
+    } else {
+      setSaveMessage({ type: 'error', text: '❌ 保存失败，请重试' });
+      setTimeout(() => setSaveMessage(null), 5000);
+    }
+  };
 
   const availableRunes = (player?.runes || []).filter(r =>
     !slots.some(s => s?.id === r.id)
@@ -84,7 +107,7 @@ export default function ArrayBuilder() {
       <div className="card mb-20">
         <div className="flex justify-between items-center flex-wrap gap-10">
           <div className="card-title" style={{ marginBottom: 0 }}>⚗️ 阵法构建台</div>
-          <div className="flex gap-10">
+          <div className="flex gap-10 flex-wrap">
             <input
               className="input"
               placeholder="阵法名称..."
@@ -92,8 +115,29 @@ export default function ArrayBuilder() {
               onChange={e => setArrayName(e.target.value)}
             />
             <button className="btn btn-secondary" onClick={clearAll}>清除全部</button>
+            <button
+              className="btn btn-success"
+              onClick={saveArray}
+              disabled={!result || result.error !== undefined || slots.filter(Boolean).length < 2}
+            >
+              💎 刻印阵法
+            </button>
           </div>
         </div>
+
+        {saveMessage && (
+          <div style={{
+            padding: 12,
+            borderRadius: 8,
+            marginTop: 16,
+            background: saveMessage.type === 'success' ? 'rgba(68,170,102,0.2)' : 'rgba(255,68,102,0.2)',
+            border: `1px solid ${saveMessage.type === 'success' ? '#44aa66' : '#ff4466'}`,
+            color: saveMessage.type === 'success' ? '#88ffaa' : '#ff88aa',
+            fontWeight: 'bold'
+          }}>
+            {saveMessage.text}
+          </div>
+        )}
 
         <p style={{ color: '#8899bb', fontSize: 13, margin: '16px 0' }}>
           将符文按顺序放入阵法槽中（至少2个），系统自动计算阵法属性。特定元素组合会触发共鸣或反噬。
@@ -105,7 +149,7 @@ export default function ArrayBuilder() {
               key={idx}
               className={`slot ${rune ? 'filled' : ''}`}
               onClick={() => rune && removeRune(idx)}
-              style={rune ? { borderColor: getComputedStyle(document.documentElement).getPropertyValue('--c') || '#6644ff' } : {}}
+              style={rune ? { borderColor: '#6644ff' } : {}}
             >
               <div className="slot-number">{idx + 1}</div>
               {rune ? (
@@ -190,6 +234,32 @@ export default function ArrayBuilder() {
           </div>
         )}
       </div>
+
+      {(player?.arrays?.length || 0) > 0 && (
+        <div className="card mt-20">
+          <div className="card-title">📜 我的阵法 ({player?.arrays?.length || 0})</div>
+          <div className="rune-grid">
+            {player?.arrays?.map((arr: any) => (
+              <div key={arr.id} className="rune-card rarity-epic" style={{ borderColor: '#ffaa44', color: '#ffaa44' }}>
+                <div className="rune-icon">📜</div>
+                <div className="rune-name">{arr.name}</div>
+                <div className="rune-power">⚡ 威力: {arr.power}</div>
+                <div className="rune-power">🎯 {arr.totalRunes || arr.runeIds?.length}个符文</div>
+                {arr.resonance && (
+                  <div className="effect-badge effect-resonance mt-10" style={{ fontSize: 10 }}>
+                    ✨ {arr.resonance.name}
+                  </div>
+                )}
+                {arr.listedForSale && (
+                  <div style={{ marginTop: 8, color: '#88ff88', fontSize: 12, fontWeight: 'bold' }}>
+                    💰 在售 {arr.price?.toLocaleString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

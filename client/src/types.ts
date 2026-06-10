@@ -74,7 +74,20 @@ export interface ArrayData {
   triggerChance: number;
   resonance: any;
   backlash: any;
+  elementDistribution?: Record<string, number>;
+  totalRunes?: number;
+  listedForSale?: boolean;
+  price?: number;
   createdAt: number;
+}
+
+export interface ArrayTradeItem {
+  arrayId: string;
+  sellerId: string;
+  price: number;
+  listedAt: number;
+  array: ArrayData;
+  seller: { id: string; name: string };
 }
 
 export interface Guild {

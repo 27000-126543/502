@@ -17,7 +17,11 @@ export const arrayApi = {
   calculate: (runeIds: string[], playerId?: string) =>
     api.post<ArrayResult>('/array/calculate', { runeIds, playerId }).then(r => r.data),
   synthesize: (runeIds: string[], playerId: string) =>
-    api.post<{ success: boolean; error?: string; rune?: Rune }>('/array/synthesize', { runeIds, playerId }).then(r => r.data)
+    api.post<{ success: boolean; error?: string; rune?: Rune }>('/array/synthesize', { runeIds, playerId }).then(r => r.data),
+  save: (playerId: string, runeIds: string[], name: string, result: ArrayResult) =>
+    api.post<{ success: boolean; array: ArrayData }>('/array/save', { playerId, runeIds, name, result }).then(r => r.data),
+  delete: (playerId: string, arrayId: string) =>
+    api.post<{ success: boolean }>('/array/delete', { playerId, arrayId }).then(r => r.data)
 };
 
 export const tradeApi = {
@@ -29,7 +33,16 @@ export const tradeApi = {
   cancel: (playerId: string, runeId: string) =>
     api.post<{ success: boolean }>('/trades/cancel', { playerId, runeId }).then(r => r.data),
   buy: (buyerId: string, runeId: string) =>
-    api.post<{ success: boolean }>('/trades/buy', { buyerId, runeId }).then(r => r.data)
+    api.post<{ success: boolean }>('/trades/buy', { buyerId, runeId }).then(r => r.data),
+  listArrays: () => api.get<any[]>('/trades/arrays').then(r => r.data),
+  getArraySuggestion: (power: number, totalRunes: number) =>
+    api.get<{ min: number; max: number; avg: number }>(`/trades/array/price-suggestion?power=${power}&totalRunes=${totalRunes}`).then(r => r.data),
+  listArray: (playerId: string, arrayId: string, price: number) =>
+    api.post<{ success: boolean }>('/trades/array/list', { playerId, arrayId, price }).then(r => r.data),
+  cancelArray: (playerId: string, arrayId: string) =>
+    api.post<{ success: boolean }>('/trades/array/cancel', { playerId, arrayId }).then(r => r.data),
+  buyArray: (buyerId: string, arrayId: string) =>
+    api.post<{ success: boolean }>('/trades/array/buy', { buyerId, arrayId }).then(r => r.data)
 };
 
 export const guildApi = {

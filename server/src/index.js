@@ -48,6 +48,65 @@ app.get('/api/player/:id', (req, res) => {
   });
 });
 
+app.post('/api/array/save', (req, res) => {
+  const { playerId, runeIds, name, result } = req.body;
+  if (!playerId || !runeIds || runeIds.length < 2) {
+    return res.status(400).json({ error: '参数错误，至少需要2个符文' });
+  }
+  const array = gameState.saveArray(playerId, runeIds, name, result);
+  if (!array) return res.status(400).json({ error: '保存失败' });
+  res.json({ success: true, array });
+});
+
+app.post('/api/array/delete', (req, res) => {
+  const { playerId, arrayId } = req.body;
+  const success = gameState.deleteArray(playerId, arrayId);
+  res.json({ success });
+});
+
+app.get('/api/trades/arrays', (req, res) => {
+  const trades = Array.from(gameState.arrayTrades.values()).map(t => {
+    const array = gameState.getArray(t.arrayId);
+    const seller = gameState.getPlayer(t.sellerId);
+    return {
+      ...t,
+      array,
+      seller: seller ? { id: seller.id, name: seller.name } : null
+    };
+  });
+  res.json(trades);
+});
+
+app.get('/api/trades/array/price-suggestion', (req, res) => {
+  const { power, totalRunes } = req.query;
+  const suggestion = gameState.getArrayPriceSuggestion({
+    power: parseInt(power) || 1000,
+    totalRunes: parseInt(totalRunes) || 4
+  });
+  res.json(suggestion);
+});
+
+app.post('/api/trades/array/list', (req, res) => {
+  const { playerId, arrayId, price } = req.body;
+  const success = gameState.listArrayForSale(playerId, arrayId, price);
+  res.json({ success });
+});
+
+app.post('/api/trades/array/cancel', (req, res) => {
+  const { playerId, arrayId } = req.body;
+  const success = gameState.cancelArraySale(playerId, arrayId);
+  res.json({ success });
+});
+
+app.post('/api/trades/array/buy', (req, res) => {
+  const { buyerId, arrayId } = req.body;
+  const success = gameState.buyArray(buyerId, arrayId);
+  if (success) {
+    io.emit('announcement', gameState.announcements[0]);
+  }
+  res.json({ success });
+});
+
 app.get('/api/player/byname/:name', (req, res) => {
   const player = gameState.getPlayerByName(req.params.name);
   if (!player) return res.status(404).json({ error: '玩家不存在' });
@@ -69,7 +128,19 @@ app.post('/api/player/login', (req, res) => {
       gameState.addRuneToPlayer(player.id, rune.id);
     }
   }
-  res.json(player);
+  const runes = player.runeIds.map(id => gameState.getRune(id)).filter(Boolean);
+  const arrays = player.arrayIds.map(id => gameState.getArray(id)).filter(Boolean);
+  const guild = player.guildId ? gameState.getGuild(player.guildId) : null;
+  res.json({
+    ...player,
+    runes,
+    arrays,
+    guild: guild ? {
+      id: guild.id,
+      name: guild.name,
+      level: guild.level
+    } : null
+  });
 });
 
 app.get('/api/rune/:id', (req, res) => {
